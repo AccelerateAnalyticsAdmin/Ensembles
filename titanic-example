@@ -1,0 +1,322 @@
+# Import Data
+train <- read.csv("~/Dropbox/datasciencecoursera/Kaggle/Titanic/train.csv", stringsAsFactors=FALSE)
+test <- read.csv("~/Dropbox/datasciencecoursera/Kaggle/Titanic/test.csv", stringsAsFactors=FALSE)
+
+str(train)
+str(test)
+
+summary(train)
+summary(test)
+
+# We'll remove Cabin from the test and training sets because the lack of values
+train$Cabin <- NULL
+test$Cabin <- NULL
+
+# We'll also remove Ticket since it's a unique identified (unique to PassengerId)
+train$Ticket <- NULL
+test$Ticket <- NULL
+
+
+### Name Data Manipulation ###
+# Break up titles to see impact.
+strsplit(test$Name[1], split='[,.]')[[1]][2]
+train$Title <- sapply(train$Name, FUN=function(x) {strsplit(x, split='[,.]')[[1]][2]})
+test$Title <- sapply(test$Name, FUN=function(x) {strsplit(x, split='[,.]')[[1]][2]})
+
+# And strip off whitespace
+train$Title <- sub(' ', '', train$Title)
+test$Title <- sub(' ', '', test$Title)
+
+#  Now, let's fix the Titles.  Wow.  We have a bunch of rouge factors in training that we don't have in test.  So if they don't both match up, cut em out!
+table(train$Title)
+table(test$Title)
+
+# The break up of these folks is interesting. Take a look here...  
+table(train$Title, train$Survived)
+
+#  the HIMs
+train$Title[train$Title %in% c("Capt", "Col", "Don", "Major", "Dr")] <- "Sir" 
+
+# the HERs
+train$Title[train$Title %in% c("Mme", "Ms")] <- "Mrs"
+train$Title[train$Title %in% c("Mlle")] <- "Miss"
+train$Title[train$Title %in% c("Jonkheer", "the Countess")] <- "Lady"
+
+# the TEST set
+test$Title[test$Title %in% c("Col", "Dr")] <- "Sir"
+test$Title[test$Title %in% "Dona"] <- "Lady"
+test$Title[test$Title %in% "Ms"] <- "Mrs"
+
+table(train$Title)
+table(test$Title)
+
+
+# Update title factors
+train$Title <- factor(train$Title)
+test$Title <- factor(test$Title)
+
+levels(train$Title)
+levels(test$Title)
+
+# We'll remove Name  because they're unique, and we have the detail we need for analysis
+train$Name<- NULL
+test$Name <- NULL
+
+
+#  Review Summary statistics
+summary(train)
+summary(test)
+
+# Take a look at zero level items 
+xtabs(~ Survived + Pclass, data = train)
+xtabs(~ Survived + Sex, data = train)
+xtabs(~ Survived + Title, data = train)
+xtabs(~ Survived + SibSp, data = train)
+xtabs(~ Survived + Parch, data = train)
+xtabs(~ Survived + Embarked, data = train)
+
+
+# Rogue Variables?
+# Embarked - remove rogue levels
+table(train$Embarked)
+table(test$Embarked)
+train$Embarked[train$Embarked == ""] <- median(train$Embarked, na.rm = TRUE)
+table(train$Embarked)
+
+#  First let's check and remove Missing Values
+# There are in Age. Let's check it.
+any(is.na(train$Age))
+any(is.na(test$Age))
+any(is.na(test$Fare))
+
+#  Yup. Yup. Yup.  So let's impute these values using mice on age data
+library(mice)
+
+set.seed(99)
+
+# Replace dataframe with imputed data - R may not like this, but randomForest does not accept missing values!
+
+imputed <- complete(mice(train))
+imputedtest <- complete(mice(test))
+
+train$Age <- imputed$Age
+test$Age <- imputedtest$Age
+test$Age <- imputedtest$Fare
+
+
+#  Review and transform Fare
+hist(train$Fare)
+train$trFare <- log(train$Fare+1)
+hist(train$trFare)
+
+test$trFare <- log(test$Fare +1)
+hist(test$trFare)
+
+
+
+### Transform Family Variable ###
+# Review summary statistics of training data.
+str(train)
+
+# Remember, familes traveled together.  So let's reflect that. (add up the family plus one for the guy/chick who didn't make it.)
+table(train$SibSp)
+table(train$Parch)
+
+train$Family <- 0
+test$Family <- 0
+
+# Reorder new variables (because it's easier to see how family will aggregate)
+train <- train[c("PassengerId", "Title", "Pclass", "Sex", "Age", "SibSp", "Parch", "Family", "Fare", "trFare", "Embarked", "Survived")]
+test <- test[c("PassengerId", "Title", "Pclass", "Sex", "Age", "SibSp", "Parch", "Family", "Fare", "trFare", "Embarked")]
+
+train$Family <- train$SibSp + train$Parch + 1
+test$Family <- test$SibSp + test$Parch + 1
+
+# Now remove the additave variables from the dataset
+train$SibSp <- NULL
+train$Parch <- NULL
+test$SibSp <- NULL
+test$SibSp <- NULL
+
+# Check table
+table(train$Family)
+table(test$Family)
+
+# The families are large.  Lets reduce our factors to three levels: Self, Small, Others
+summary(train$Family)
+summary(test$Family)
+train$FamilySize <- ifelse(train$Family ==1, "Self", ifelse(train$Family > 1 & train$Family <= 2, "Plus One","Group"))
+test$FamilySize <- ifelse(test$Family ==1, "Self", ifelse(test$Family > 1 & test$Family <= 2, "Plus One","Group"))
+
+train$Family <- NULL
+test$Family <- NULL
+
+# Reorder new variables (because it's easier to see how family will aggregate)
+train <- train[c("PassengerId", "Title", "Pclass", "Sex", "Age", "FamilySize", "Fare", "trFare", "Embarked", "Survived")]
+test <- test[c("PassengerId", "Title", "Pclass", "Sex", "Age", "FamilySize", "Fare", "trFare", "Embarked")]
+
+
+# Update labels to factors
+train$Pclass <- as.factor(train$Pclass)
+train$Sex <- as.factor(train$Sex)
+train$FamilySize <- as.factor(train$FamilySize)
+train$Embarked <- as.factor(train$Embarked)
+
+#...and on the test set
+test$Pclass <- as.factor(test$Pclass)
+test$Sex <- as.factor(test$Sex)
+test$FamilySize <- as.factor(test$FamilySize)
+test$Embarked <- as.factor(test$Embarked)
+
+
+
+
+###  Create Dummy Data Frame ###
+# Create dummy variables
+library(fscaret)
+library(caret)
+
+set.seed(NULL)
+set.seed(99)
+trainDummy <- dummyVars("~.",data = train, fullRank=F)
+testDummy <- dummyVars("~.",data = test, fullRank=F)
+
+# Recreate the original dataset, but this time w dummy variables
+titanic <- as.data.frame(predict(trainDummy,train))
+print(names(titanic))
+
+# And turn the training set into dummy data frame
+Titanic_Test <- as.data.frame(predict(testDummy, test))
+print(names(Titanic_Test))
+
+
+
+
+
+
+# Split the subset train into train and test sets for analysis
+library(caTools)
+set.seed(NULL)
+set.seed(99)
+split <- sample.split(titanic$Survived, SplitRatio = .6)
+titanicTrain <- subset(titanic, split == TRUE)
+titanicTest <- subset(titanic, split == FALSE)
+
+names(titanicTrain)
+names(titanicTest)
+
+
+
+# Check models
+getModelInfo()$gbm$type
+getModelInfo()$rpart$type
+getModelInfo()$glmnet$type
+getModelInfo()$treebag$type
+
+# names(getModelInfo()) 
+fsModels <- c("gbm", "rpart", "glmnet", "treebag")
+
+# Find top variables
+topVariables <- fscaret(titanicTrain, titanicTest, myTimeLimit = 30, preprocessData=TRUE, 
+                        Used.funcClassPred = fsModels, with.labels=TRUE, classPred = TRUE, supress.output=FALSE, no.cores=2)
+names(topVariables)
+
+#Analyze results
+topVariables$VarImp
+topVariables$PPlabels
+
+
+
+
+
+# Update variables in the titanic data frame
+titanic <- titanic[, c("PassengerId", "Title.Lady", "Title.Master", "Title.Miss", 
+             "Title.Mr", "Title.Mrs", "Title.Rev", "Title.Sir", "Pclass.1", 
+             "Pclass.2", "Pclass.3", "Sex.female", "Sex.male", "Age", "trFare", "Survived")]
+
+# Code Variables
+outcomeVariable <- "Survived"
+predictors <- names(titanic)[names(titanic) != outcomeVariable]
+
+# Run CrossValidation
+nfolds <- trainControl(method = 'cv', number = 25, returnResamp='none')
+
+# Baseline Model
+baseline <- train(titanicTrain[,predictors], titanicTrain[,outcomeVariable], method = "gbm", trControl = nfolds)
+
+#  Run predictions
+preds <- predict(object = baseline, titanicTest[,predictors])
+library(pROC)
+baseline_auc <- roc(titanicTest[,outcomeVariable], preds)
+print(baseline_auc$auc) 
+
+
+# train the caret models
+gbm <- train(titanicTrain[,predictors], (titanicTrain[,outcomeVariable]), method='gbm', trControl = nfolds)
+gbm_preds <- predict(gbm, titanicTest[,predictors])
+gbm_auc <- roc(titanicTest[,outcomeVariable], gbm_preds) 
+
+rpart <- train(titanicTrain[,predictors], (titanicTrain[,outcomeVariable]), method='rpart', trControl = nfolds)
+rpart_preds <- predict(rpart, titanicTest[,predictors])
+rpart_auc <- roc(titanicTest[,outcomeVariable], rpart_preds)
+rpart_auc$auc 
+
+glmnet <- train(titanicTrain[,predictors], (titanicTrain[,outcomeVariable]), method= 'glmnet', trControl = nfolds)
+glmnet_preds <- predict(glmnet, titanicTest[,predictors])
+glmnet_auc <- roc(titanicTest[,outcomeVariable], glmnet_preds)
+glmnet_auc$auc
+
+treebag <- train(titanicTrain[,predictors], (titanicTrain[,outcomeVariable]), method='treebag', trControl = nfolds)
+treebag_preds <- predict(treebag, titanicTest[,predictors])
+treebag_auc <- roc(titanicTest[,outcomeVariable], treebag_preds)
+treebag_auc$auc  
+
+#  Compare predictions -  AUC
+gbm_auc$auc
+rpart_auc$auc 
+glmnet_auc$auc
+treebag_auc$auc  
+
+
+
+
+####  ENSEMBLE BLENDING  ###########
+
+set.seed(NULL)
+set.seed(99)
+split <- floor(nrow(titanic)/3)
+ensembleData <- titanic[0:split,]  
+blenderData <- titanic[(split+1): (split*2), ]
+testingData <- titanic[(split*2+1):nrow(titanic),]
+
+
+# train all the ensemble models with ensembleData
+model_gbm <- train(ensembleData[,predictors], ensembleData[,outcomeVariable], method='gbm', trControl = nfolds)
+model_rpart <- train(ensembleData[,predictors], ensembleData[,outcomeVariable], method='rpart', trControl = nfolds)
+model_glmnet <- train(ensembleData[,predictors], ensembleData[,outcomeVariable], method='glmnet', trControl = nfolds)
+model_treebag <- train(ensembleData[,predictors], ensembleData[,outcomeVariable], method='treebag', trControl = nfolds)
+
+
+# get predictions for each ensemble model for two last data sets - blender and testing data - and add them back to themselves
+blenderData$gbm_PROB <- predict(model_gbm, blenderData[,predictors])
+blenderData$rpart_PROB <- predict(model_rpart, blenderData[,predictors])
+blenderData$glmnet_PROB <- predict(model_glmnet, blenderData[,predictors])
+blenderData$treebag_PROB <- predict(model_treebag, blenderData[,predictors])
+
+testingData$gbm_PROB <- predict(model_gbm, testingData[,predictors])
+testingData$rpart_PROB <- predict(model_rpart, testingData[,predictors])
+testingData$glmnet_PROB <- predict(model_glmnet, testingData[,predictors])
+testingData$treebag_PROB <- predict(model_treebag, testingData[,predictors])
+
+
+
+# Blend final model
+predictors <- names(blenderData)[names(blenderData) != outcomeVariable]
+final_blender_model <- train(blenderData[,predictors], blenderData[,outcomeVariable], method='gbm', trControl= nfolds)
+
+
+
+##  Check final predictions ##   
+final_preds <- predict(final_blender_model, blenderData[,predictors])
+final_auc <- roc(blenderData[,outcomeVariable], final_preds)
+final_auc$auc
