@@ -1,6 +1,6 @@
 # Import Data
-train <- read.csv("~/Dropbox/datasciencecoursera/Kaggle/Titanic/train.csv", stringsAsFactors=FALSE)
-test <- read.csv("~/Dropbox/datasciencecoursera/Kaggle/Titanic/test.csv", stringsAsFactors=FALSE)
+train <- read.csv("~/Titanic/train.csv", stringsAsFactors=FALSE)
+test <- read.csv("~/Titanic/test.csv", stringsAsFactors=FALSE)
 
 str(train)
 str(test)
@@ -35,12 +35,12 @@ table(test$Title)
 table(train$Title, train$Survived)
 
 #  the HIMs
-train$Title[train$Title %in% c("Capt", "Col", "Don", "Major", "Dr")] <- "Sir" 
+train$Title[train$Title %in% c("Capt", "Col", "Don", "Major", "Dr", "Jonkheer")] <- "Sir" 
 
 # the HERs
 train$Title[train$Title %in% c("Mme", "Ms")] <- "Mrs"
 train$Title[train$Title %in% c("Mlle")] <- "Miss"
-train$Title[train$Title %in% c("Jonkheer", "the Countess")] <- "Lady"
+train$Title[train$Title %in% c("the Countess")] <- "Lady"
 
 # the TEST set
 test$Title[test$Title %in% c("Col", "Dr")] <- "Sir"
@@ -126,8 +126,8 @@ train$Family <- 0
 test$Family <- 0
 
 # Reorder new variables (because it's easier to see how family will aggregate)
-train <- train[c("PassengerId", "Title", "Pclass", "Sex", "Age", "SibSp", "Parch", "Family", "Fare", "trFare", "Embarked", "Survived")]
-test <- test[c("PassengerId", "Title", "Pclass", "Sex", "Age", "SibSp", "Parch", "Family", "Fare", "trFare", "Embarked")]
+train <- train[c("PassengerId", "Title", "Pclass", "Age", "SibSp", "Parch", "Family", "trFare", "Embarked", "Survived")]
+test <- test[c("PassengerId", "Title", "Pclass",  "Age", "SibSp", "Parch", "Family", "trFare", "Embarked")]
 
 train$Family <- train$SibSp + train$Parch + 1
 test$Family <- test$SibSp + test$Parch + 1
